@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+
+# C++/CUDA build artifacts
+*.o
+*.so
+*.a
+*.ptx
+*.cubin
+*.fatbin
+csrc/build/
+**/torch_extensions/
+
+# uv
+.uv/
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# local experiment outputs
+results/
+*.log
+scratch/
