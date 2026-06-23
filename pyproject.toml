@@ -4,13 +4,17 @@ version = "0.0.1"
 requires-python = ">=3.12"
 dependencies = [
     "torch",
+    "torchvision",
     "numpy",
     "pytest",
     "transformers>=5.12.1",
+    "datasets>=5.0.0",
+    "pillow>=12.2.0",
 ]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
