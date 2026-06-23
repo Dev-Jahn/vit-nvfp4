@@ -30,6 +30,20 @@ def test_qlinear_close_to_bf16():
 
 
 @requires_sm120
+def test_qlinear_static_global_scale_matches_dynamic_when_equal():
+    # Setting the static activation scale to exactly the dynamic value reproduces dynamic output.
+    lin = nn.Linear(256, 128).cuda().bfloat16()
+    q = QuantLinear.from_linear(lin)
+    x = torch.randn(4, 256, device="cuda", dtype=torch.bfloat16)
+    y_dyn = q(x)
+    _, _, gs = quantize_to_nvfp4(x.float(), 16)
+    q.set_activation_scale(gs)
+    y_static = q(x)
+    assert torch.equal(y_dyn, y_static)
+    assert q.x_global_scale is not None
+
+
+@requires_sm120
 def test_qlinear_no_bias():
     lin = nn.Linear(128, 64, bias=False).cuda().bfloat16()
     q = QuantLinear.from_linear(lin)

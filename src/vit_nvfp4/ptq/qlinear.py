@@ -19,10 +19,16 @@ class QuantLinear(nn.Module):
         self.register_buffer("w_codes", w_codes)
         self.register_buffer("w_block_scale", w_block_scale)
         self.register_buffer("w_global_scale", w_global_scale)
+        # static per-tensor activation global scale (set by calibration); None -> dynamic per-input.
+        self.register_buffer("x_global_scale", None)
         if bias is not None:
             self.register_buffer("bias", bias.detach().clone())
         else:
             self.bias = None
+
+    def set_activation_scale(self, scale: torch.Tensor) -> None:
+        """Pin a static per-tensor activation global scale (from calibration)."""
+        self.x_global_scale = scale.detach().to(torch.float32).reshape(()).clone()
 
     @classmethod
     def from_linear(cls, linear: nn.Linear) -> "QuantLinear":
@@ -33,7 +39,8 @@ class QuantLinear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out_shape = (*x.shape[:-1], self.out_features)
         x2d = x.reshape(-1, self.in_features)
-        y = nvfp4_linear(x2d, self.w_codes, self.w_block_scale, self.w_global_scale, bias=self.bias)
+        y = nvfp4_linear(x2d, self.w_codes, self.w_block_scale, self.w_global_scale,
+                         x_global_scale=self.x_global_scale, bias=self.bias)
         return y.reshape(out_shape)
 
     def extra_repr(self) -> str:
