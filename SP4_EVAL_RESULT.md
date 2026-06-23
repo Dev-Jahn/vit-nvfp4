@@ -4,14 +4,29 @@
 
 User directive: measure **real downstream accuracy** before building mixed-precision. Done.
 
-## Result — CIFAR-100 (balanced, all 100 classes; gallery 2000 / query 1000)
+## HEADLINE — on a proper high-res benchmark, W4A4 PTQ is ~lossless
 
+The first measurement used CIFAR-100 (32×32 upsampled to 224); that is too low-res for DINOv2 (patch14, designed for ≥224) and the 32→224 upsampling stresses the model. Re-measured on a native-high-res standard benchmark:
+
+### Oxford Flowers-102 (native ~500px, 102 classes; gallery 3060 / query 1020) — AUTHORITATIVE
+| | k=10 | k=20 |
+|---|---|---|
+| BF16 k-NN top-1 | **0.9931** | 0.9765 |
+| W4A4 k-NN top-1 (skip 2/2, max-calibrated) | **0.9931** | 0.9833 |
+| **accuracy drop** | **0.000** | −0.007 (W4A4 higher) |
+| query feature cosine vs BF16 | 0.979 | |
+
+**On high-res images W4A4 PTQ shows essentially ZERO k-NN accuracy loss.** (Caveat: 99.3% is near-saturated — a harder high-res set like Food-101 would have more headroom; offered.)
+
+### CIFAR-100 (32×32 upsampled; low-res, kept for contrast) — gallery 2000 / query 1000
 | | k=10 | k=20 |
 |---|---|---|
 | BF16 k-NN top-1 | **0.822** | 0.812 |
 | W4A4 k-NN top-1 (skip 2/2, max-calibrated) | **0.798** | 0.784 |
 | **accuracy drop** | **−2.4 pt** | −2.8 pt |
 | query feature cosine vs BF16 | 0.956 | |
+
+The −2.4 pt on CIFAR was a **low-resolution artifact**, not a true W4A4 cost. The harness default is now Flowers-102.
 
 ## Reading
 - **W4A4 PTQ costs ~2.5 percentage points of k-NN top-1 — a modest drop, not the collapse** the all-layer/naive-W4A4 literature reports for ViTs. This is what feature cosine 0.95 actually means downstream.

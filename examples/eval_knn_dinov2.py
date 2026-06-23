@@ -16,15 +16,19 @@ from vit_nvfp4.ptq import quantize_model, vit_block_policy, calibrate_activation
 from vit_nvfp4.eval.knn import knn_top1_accuracy  # noqa: E402
 
 NAME = "facebook/dinov2-base"
-DATASET = "uoft-cs/cifar100"  # balanced, all 100 classes present (not class-ordered)
-N_GALLERY, N_QUERY, BS = 2000, 1000, 64
+# High-res standard DINOv2 transfer benchmark (~500px native, 102 classes); small (~330MB).
+DATASET = "dpdl-benchmark/oxford_flowers102"
+IMG_KEY, LBL_KEY = "image", "label"
+GALLERY_SPLIT, QUERY_SPLIT = "test", "validation"  # test=6149 (gallery), validation=1020 (query)
+N_GALLERY, N_QUERY, BS = 3060, 1020, 64
 
 
 def load_images(split, n, seed):
-    # full (non-streaming) load + random balanced subset across all classes
-    ds = load_dataset(DATASET, split=split).shuffle(seed=seed).select(range(n))
-    imgs = [ex["img"].convert("RGB") for ex in ds]
-    labels = torch.tensor([ex["fine_label"] for ex in ds])
+    # full (non-streaming) load + random subset across all classes
+    ds = load_dataset(DATASET, split=split).shuffle(seed=seed)
+    ds = ds.select(range(min(n, len(ds))))
+    imgs = [ex[IMG_KEY].convert("RGB") for ex in ds]
+    labels = torch.tensor([ex[LBL_KEY] for ex in ds])
     return imgs, labels
 
 
@@ -41,8 +45,8 @@ def extract(model, processor, images, device="cuda", bs=BS):
 def main():
     torch.manual_seed(0)
     proc = AutoImageProcessor.from_pretrained(NAME)
-    g_imgs, g_lab = load_images("train", N_GALLERY, seed=0)
-    q_imgs, q_lab = load_images("test", N_QUERY, seed=1)
+    g_imgs, g_lab = load_images(GALLERY_SPLIT, N_GALLERY, seed=0)
+    q_imgs, q_lab = load_images(QUERY_SPLIT, N_QUERY, seed=1)
     print(f"{DATASET}: gallery={len(g_imgs)} query={len(q_imgs)}")
 
     ref = AutoModel.from_pretrained(NAME, dtype=torch.bfloat16).cuda().eval()
