@@ -9,13 +9,17 @@ def tensor_cosine(a: torch.Tensor, b: torch.Tensor) -> float:
 
 
 @torch.no_grad()
-def block_output_cosines(ref_model, quant_model, inputs, block_container="encoder.layer"):
+def block_output_cosines(ref_model, quant_model, inputs, block_container=None):
     """Per-block output cosine between a reference and quantized model.
 
     Registers forward hooks on each child of ``ref_model.<block_container>`` and the
     corresponding quant block, runs both, and returns a list of per-block cosines.
-    ``inputs`` is a dict of kwargs passed to both models.
+    ``inputs`` is a dict of kwargs passed to both models. ``block_container`` is
+    auto-detected per-model when None (e.g. DINOv3=``model.layer``, SigLIP=``encoder.layers``).
     """
+    if block_container is None:
+        from .models import find_block_container
+        block_container = find_block_container(ref_model)
     ref_blocks = ref_model.get_submodule(block_container)
     q_blocks = quant_model.get_submodule(block_container)
     ref_out, q_out = {}, {}

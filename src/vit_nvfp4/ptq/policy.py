@@ -13,18 +13,27 @@ def block_index(name: str):
     return int(m.group(1)) if m else None
 
 
-def vit_block_policy(num_layers: int, skip_first: int = 2, skip_last: int = 2):
+def vit_block_policy(num_layers: int, skip_first: int = 2, skip_last: int = 2,
+                     container: str | None = None):
     """Quantize nn.Linear layers in the *middle* blocks only.
 
     Returns a ``(name, module) -> bool`` predicate. Linears in the first
     ``skip_first`` and last ``skip_last`` blocks, and any Linear without a
     block index (heads, embeddings), are kept in BF16.
+
+    ``container`` (dotted path of the block stack, e.g. ``encoder.layer``) scopes
+    matching to that stack so a model with multiple ``.layer.N`` stacks (e.g. a
+    V-JEPA encoder + predictor) only quantizes the intended one. None = match any.
     """
     lo, hi = skip_first, num_layers - skip_last
 
     def should_quantize(name: str, module: nn.Module) -> bool:
         if not isinstance(module, nn.Linear):
             return False
+        if container is not None:
+            seg = container + "."
+            if not (name.startswith(seg) or ("." + seg) in name):
+                return False
         i = block_index(name)
         return i is not None and lo <= i < hi
 
