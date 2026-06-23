@@ -3,7 +3,7 @@ import torch.nn as nn
 from .qlinear import QuantLinear
 
 
-def quantize_model(model: nn.Module, should_quantize, w_block_select: str = "six") -> int:
+def quantize_model(model: nn.Module, should_quantize, w_block_select: str = "mse") -> int:
     """In-place swap of selected nn.Linear modules with NVFP4 ``QuantLinear``.
 
     ``should_quantize`` is a ``(name, module) -> bool`` predicate (see policy.py).

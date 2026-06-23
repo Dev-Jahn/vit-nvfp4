@@ -31,7 +31,10 @@ class QuantLinear(nn.Module):
         self.x_global_scale = scale.detach().to(torch.float32).reshape(()).clone()
 
     @classmethod
-    def from_linear(cls, linear: nn.Linear, w_block_select: str = "six") -> "QuantLinear":
+    def from_linear(cls, linear: nn.Linear, w_block_select: str = "mse") -> "QuantLinear":
+        # Default 'mse' = Four Over Six (per-block 6-vs-4 scale select): free, weights-only,
+        # format-preserving, and the robust W4A4 accuracy winner (see SP5_RESULT.md).
+        # Activations stay 'six' (nvfp4_linear default) — activation-side FoS is unmeasured.
         w = linear.weight.data  # (out, in) = (N, K)
         codes, bscale, gscale = quantize_to_nvfp4(w.float(), 16, block_select=w_block_select)
         return cls(codes, bscale, gscale, linear.bias, linear.in_features, linear.out_features)

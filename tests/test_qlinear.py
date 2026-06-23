@@ -13,7 +13,8 @@ def test_qlinear_matches_nvfp4_linear():
     x = torch.randn(4, 10, 256, device="cuda", dtype=torch.bfloat16)
     y = q(x)
     assert y.shape == (4, 10, 128)
-    wc, wb, wg = quantize_to_nvfp4(lin.weight.data.float(), 16)
+    # from_linear now defaults to 'mse' (Four Over Six); reference must match that to test equivalence.
+    wc, wb, wg = quantize_to_nvfp4(lin.weight.data.float(), 16, block_select="mse")
     ref = nvfp4_linear(x.reshape(-1, 256), wc, wb, wg, bias=lin.bias).reshape(4, 10, 128)
     assert torch.equal(y, ref)
 

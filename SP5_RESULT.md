@@ -32,8 +32,9 @@ Implemented & integrated four calibration-only techniques (from the `docs/resear
 3. **RegCache (token deletion) is task-dependent and can hurt** (helped CIFAR +1.1, hurt Food-101 −0.5): deleting high-norm tokens removes signal on some image distributions. Keep optional, off by default; its KV-prefix half is already disabled for DINOv2 (massive-activation, not sink-driven).
 4. **bias correction is neutral for cosine k-NN** (mean shift annihilated by L2-norm); near-free, keep as a final cleanup for non-retrieval uses.
 
-## Recommendation
-- **Default weight quantization → Four Over Six** (`w_block_select='mse'` in `quantize_model` / `QuantLinear.from_linear`). It is currently opt-in (default `'six'` for backward-compat); flipping the PTQ-frontend default to `'mse'` is the suggested next change (strictly ≥ 'six' per-block, negligible one-shot cost).
+## Recommendation — APPLIED
+- **PTQ-frontend default flipped to Four Over Six**: `quantize_model` and `QuantLinear.from_linear` now default `w_block_select='mse'`. Weights get the per-block 6/4 MSE selection by default (strictly ≥ 'six' per-block, negligible one-shot cost).
+- **Activations stay 'six'**: `quantize_to_nvfp4`'s low-level default is unchanged, so `nvfp4_linear`'s online activation path is unaffected (activation-side FoS is unmeasured and would add per-forward cost). To opt out on weights, pass `w_block_select='six'`.
 - GPTQ / RegCache / bias remain available, composable options for tasks where they help.
 
 ## Deliverables
