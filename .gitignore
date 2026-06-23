@@ -30,3 +30,7 @@ csrc/build/
 results/
 *.log
 scratch/
+
+# claude-code local config/hooks + agent worktrees (machine-specific)
+.claude/
+.worktrees/
