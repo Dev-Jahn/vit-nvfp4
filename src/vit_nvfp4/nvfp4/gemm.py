@@ -6,7 +6,7 @@ from .backends import reference
 _BACKENDS = {"reference": reference.gemm}
 
 # ladder priority: real tensor-core kernels register ahead of reference once validated.
-_PRIORITY = ("flashinfer_b12x", "cutlass79", "cublaslt", "reference")
+_PRIORITY = ("torch_scaled_mm_v2", "flashinfer_b12x", "cutlass79", "cublaslt", "reference")
 
 
 def register_backend(name, fn):
@@ -36,3 +36,15 @@ def nvfp4_linear(x, w_codes, w_bs, w_gs, *, x_global_scale=None, bias=None, back
     if bias is not None:
         y = y + bias.to(y.dtype)
     return y
+
+
+def _autoregister_builtin_backends():
+    """Register tensor-core backends that import cleanly in this environment."""
+    try:
+        from .backends import torch_scaled_mm
+        _BACKENDS["torch_scaled_mm_v2"] = torch_scaled_mm.gemm
+    except Exception:
+        pass
+
+
+_autoregister_builtin_backends()

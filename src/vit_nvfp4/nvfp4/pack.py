@@ -30,3 +30,29 @@ def pad_to_block(x: torch.Tensor, block: int = 16, dim: int = -1):
 def as_float4_x2(packed: torch.Tensor) -> torch.Tensor:
     """Reinterpret a packed uint8 tensor as ``torch.float4_e2m1fn_x2`` (for kernels that require it)."""
     return packed.view(torch.float4_e2m1fn_x2)
+
+
+def _ceil_div(a, b):
+    return (a + b - 1) // b
+
+
+def to_blocked(input_matrix: torch.Tensor) -> torch.Tensor:
+    """Swizzle a (H, W) scale matrix into NVIDIA's 128x4 (internally 32x4x4) block-scale layout.
+
+    Returns a flattened tensor as expected by block-scaled GEMM kernels (SWIZZLE_32_4_4).
+    Vendored from the reference implementation (transformer_nuggets / torch test internals).
+    See https://docs.nvidia.com/cuda/cublas/index.html#d-block-scaling-factors-layout
+    """
+    rows, cols = input_matrix.shape
+    n_row_blocks = _ceil_div(rows, 128)
+    n_col_blocks = _ceil_div(cols, 4)
+    padded_rows = n_row_blocks * 128
+    padded_cols = n_col_blocks * 4
+    padded = input_matrix
+    if (rows, cols) != (padded_rows, padded_cols):
+        padded = torch.zeros((padded_rows, padded_cols), device=input_matrix.device,
+                             dtype=input_matrix.dtype)
+        padded[:rows, :cols] = input_matrix
+    blocks = padded.view(n_row_blocks, 128, n_col_blocks, 4).permute(0, 2, 1, 3)
+    rearranged = blocks.reshape(-1, 4, 32, 4).transpose(1, 2).reshape(-1, 32, 16)
+    return rearranged.flatten()
