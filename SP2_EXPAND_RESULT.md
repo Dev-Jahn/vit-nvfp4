@@ -35,6 +35,17 @@ Swap counts confirm the hard cases: Qwen3-VL's **fused qkv** is swapped (4 Linea
 ### Qwen3-VL ViT is the W4A4-sensitive outlier
 Sweeping skip depth (same image): skip(2,2)=0.881 · (4,4)=0.907 · (6,6)=0.915 · (8,8)=0.938. Monotonic with quantized-block count — distributed error accumulation, not a kernel bug (the GEMM is the SP1-validated path that yields ≥0.98 on every other model here). Unlike the SSL-pretrained encoders (DINOv2/v3, SigLIP), Qwen3-VL's vision tower does **not** reach ~0.98 even at skip(8,8). **This is the prime customer for the planned per-Linear mixed-precision driver** (promote high-error Linears to BF16 via `block_output_cosines`) or an FP8 vision-encoder fallback. A true downstream-VQA eval (not done here — too heavy) is needed to judge task impact.
 
+**Remaining calibration-only levers measured (skip 2,2, 8-image calib, same eval image).** The 0.881 baseline applied only the *defaults* (Four Over Six weights + max activation calibration); the opt-in SP5 levers were not. Adding them:
+
+| config | output cosine | Δ |
+|---|---|---|
+| Four Over Six + calib (baseline) | 0.890 | — |
+| + bias correction | 0.894 | +0.004 |
+| **GPTQ** + calib | 0.915 | +0.025 |
+| **GPTQ + bias** + calib | **0.921** | **+0.031** |
+
+GPTQ does the heavy lifting here — and this is exactly the SP5 nuance confirmed: GPTQ raises *raw weight/output cosine* but its gain didn't transfer to the L2-normalized k-NN top-1 of the SSL encoders; Qwen3-VL ViT is evaluated by raw cosine, so it *does* benefit. But **0.921 is the weights-only ceiling** — still short of the ~0.98 the SSL encoders hit, so the structural gap (24-layer accumulation, VLM-tower statistics, fused-qkv dynamic range) still needs the **mixed-precision driver**, not more calibration tricks.
+
 ## Blockers / notes
 - **V-JEPA2.1 BF16 forward is broken upstream**, independent of quantization: its custom RoPE attention upcasts q,k to fp32 while v stays bf16, and `scaled_dot_product_attention` rejects the dtype mismatch. Workaround: run the model in **fp32** (QuantLinear follows `out_dtype=x.dtype`, so the W4A4 path runs in fp32 too). It is a 64-frame **video** model (`fpc64`); we used a 16-frame random clip for a relative fidelity check, so 0.987 is a sanity number, not a benchmark.
 - **SigLIP2**: validated the real target `google/siglip2-base-patch16-224` (downloaded). Its `Siglip2Model.vision_model` resolves to a `SiglipVisionModel` whose attention-pool `pooler_output` is the retrieval feature.
