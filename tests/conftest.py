@@ -1,5 +1,10 @@
+import os
+
 import pytest
 import torch
+
+# HF model cache on this box (see env-hardware memory).
+os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 
 def _is_sm120():
