@@ -2,6 +2,7 @@ import torch
 import pytest
 from vit_nvfp4.nvfp4.quant import quantize_to_nvfp4, dequantize_nvfp4
 from vit_nvfp4.nvfp4 import gemm as G
+from vit_nvfp4.nvfp4.check import assert_gemm_correct
 
 
 def _make_operands(M, K, N, dist, dtype=torch.float32, dev="cpu"):
@@ -36,3 +37,8 @@ def test_nvfp4_linear_shapes():
     w_codes, w_bs, w_gs = quantize_to_nvfp4(w, 16)
     y = G.nvfp4_linear(x, w_codes, w_bs, w_gs, bias=torch.zeros(32), backend="reference")
     assert y.shape == (8, 32)
+
+
+def test_gate_passes_for_reference_cpu():
+    m = assert_gemm_correct("reference", 128, 512, 128, device="cpu")
+    assert m["cos_emul"] > 0.999 and not m["all_zero"]
