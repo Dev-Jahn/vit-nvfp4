@@ -31,9 +31,9 @@ class QuantLinear(nn.Module):
         self.x_global_scale = scale.detach().to(torch.float32).reshape(()).clone()
 
     @classmethod
-    def from_linear(cls, linear: nn.Linear) -> "QuantLinear":
+    def from_linear(cls, linear: nn.Linear, w_block_select: str = "six") -> "QuantLinear":
         w = linear.weight.data  # (out, in) = (N, K)
-        codes, bscale, gscale = quantize_to_nvfp4(w.float(), 16)
+        codes, bscale, gscale = quantize_to_nvfp4(w.float(), 16, block_select=w_block_select)
         return cls(codes, bscale, gscale, linear.bias, linear.in_features, linear.out_features)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
