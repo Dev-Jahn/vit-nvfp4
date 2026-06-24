@@ -137,8 +137,8 @@ global scale를 빠뜨리면 동적범위가 조용히 잘린다.
 
 ## 6. 환경 / 빌드
 
-- `/home/jahn/workspace/vit-nvfp4`에 **uv** 프로젝트(`pyproject.toml`). 시스템 python·repvis venv 재사용 안 함.
-- **PyTorch cu130** 휠(승인됨) — 시스템 CUDA 13.1 / nvcc 13.1과 정합. (repvis의 cu128과 별개 환경.)
+- repo 루트의 **uv** 프로젝트(`pyproject.toml`). 시스템 python 재사용 안 함(독립 venv).
+- **PyTorch cu130** 휠(승인됨) — 시스템 CUDA 13.1 / nvcc 13.1과 정합.
 - `TORCH_CUDA_ARCH_LIST=12.0a` **필수** — 'a' 접미사 누락 시 NVFP4 block-scaled MMA가 조용히 깨짐(pytorch #172807). (후속 grouped/MoE 불필요 — ViT tower는 dense.)
 - 의존성 핀(초기): FlashInfer ≥ 0.6.7, CUTLASS 4.x(서브모듈/체크아웃), (선택) torchao·modelopt는 SP2부터. 빌드 도구: cmake/ninja(존재), nvcc 13.1(존재).
 
