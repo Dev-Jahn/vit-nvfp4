@@ -37,8 +37,8 @@ The **FP4 GEMM itself is fine** (≈1.3–1.8× faster than bf16 on large GEMMs)
 
 `torch.compile` fuses the elementwise quant into ~bf16 parity (22× over eager) **for the STANDALONE function**. repvis exposes compile via `REPVIS_COMPILE=1`. **But this parity does NOT carry to the full model** — see the multi-model benchmark below.
 
-## Full-model benchmark — all 4 repvis models, torch.compile ON (the real deployment baseline)
-Real test.mp4 input (DINO: 8 frames, per-frame @max_side 1024; V-JEPA: 32-frame clip @640). W4A4 = NVFP4 Linears (middle blocks) + SA3 FP4 attention (all blocks). Steady-state fwd ms after compile warmup.
+## Full-model benchmark — all 4 repvis models, torch.compile ON, at repvis DEFAULT resolution
+Real test.mp4 input (DINO: 8 frames, per-frame @max_side 1024; V-JEPA: 32-frame clip @640). W4A4 = NVFP4 Linears (middle blocks) + SA3 FP4 attention (all blocks). Steady-state fwd ms after compile warmup. **(At full resolution the picture flips — next section.)**
 
 | model | S | BF16 (compiled) | W4A4+SA3 (compiled) | speedup | feat cos | PCA-RGB cos |
 |---|---|---|---|---|---|---|
@@ -47,14 +47,26 @@ Real test.mp4 input (DINO: 8 frames, per-frame @max_side 1024; V-JEPA: 32-frame 
 | dinov3-vitb16 | 2309 | 18.8 ms | 43.5 ms | **0.43×** | 0.805 | 0.912 |
 | vjepa21-vitl | 14080 | 93.7 ms | 142.3 ms | **0.66×** | 0.970 | 0.992 |
 
-**W4A4+SA3 is SLOWER than compiled BF16 on every model (0.43–0.66×), even at V-JEPA's S=14080.** Accuracy holds (PCA-RGB ≥ 0.99 except DINOv3 0.912 / feat 0.805). The compile logs show the cause: `torch._scaled_mm_v2` and the SA3 custom op are **opaque to TorchDynamo (graph breaks)**, so the online activation quant does not fully fuse in-model — the standalone-function parity does not carry. And compiled BF16 is itself a strong baseline.
+**At this default resolution W4A4+SA3 is slower on every model (0.43–0.66×).** Cause (compile logs): `torch._scaled_mm_v2` and the SA3 op are **opaque to TorchDynamo (graph breaks)**, so the online activation quant doesn't fully fuse — at small S the residual overhead dominates. **But this flips with resolution.**
+
+## Full resolution (max_side 1920, all 90,003 frames) — the speedup SCALES WITH S
+Bigger inputs → bigger Linear GEMMs (FP4 wins) + longer attention (SA3 wins), and the fixed overhead amortizes. Compiled speedup (BF16 / W4A4+SA3), and full-video forward-only time over all 90,003 frames at source fps:
+
+| model | S @1920 | speedup @default | speedup @1920 | feat cos | PCA-RGB | full-video fwd (BF16 → W4A4+SA3) |
+|---|---|---|---|---|---|---|
+| dinov2-base | 10.5k | 0.48× | 0.85× | 0.953 | 0.994 | 28.0 → 32.9 min |
+| dinov2-large | 10.5k | 0.55× | 0.87× | 0.958 | 0.994 | 79.4 → 91.3 min |
+| dinov3-vitb16 | 8.2k | 0.43× | 0.81× | 0.816 | 0.931 | 19.5 → 24.1 min |
+| **vjepa21-vitl** | **130.6k** | 0.66× (S14k) | **1.26×** | 0.972 | 0.991 | **232.7 → 184.6 min (−48 min)** |
+
+V-JEPA sequence-length sweep (compiled): **S=14k → 0.68×, S=37k → 0.98×, S=131k → 1.26×.** At full resolution the spatio-temporal V-JEPA workload (S≈131k, attends all tokens at once) is **1.26× faster** with W4A4+SA3 — saving ~48 min on the hour-long video (233→185 min forward-only), accuracy preserved (PCA 0.991). DINO stays per-frame (S ≤ 10.5k even at 1920), below the **~S≈37k crossover**, so it's still ~0.81–0.87×.
 
 ## Corrected conclusions
-1. **"W4A4 NVFP4 = 3× faster" (PHASE0/SP1) was a GEMM-only microbench** (operands pre-quantized). It does not reflect inference: end-to-end our W4A4 path is *slower*.
-2. **`torch.compile` does NOT rescue it in-model.** It fuses the *standalone* quant to bf16 parity, but `_scaled_mm_v2` graph-breaks dynamo inside the real model, so compiled W4A4+SA3 is **0.43–0.66× (1.5–2.3× slower)** across all four models.
-3. **As built, this toolkit delivers PTQ accuracy, NOT inference speed.** Real speedup needs the quant+FP4-GEMM fused and registered as a `torch.library` custom op (so dynamo keeps it in-graph), or an external optimized W4A4 runtime (vLLM `nvfp4_scaled_mm_sm120`, TRT-LLM). `nvfp4_linear` (eager quant + `_scaled_mm_v2`) is a correctness/measurement reference.
-4. **SA3 FP4 attention** speeds attention only (≈1.3× at long S; loses below ~S=4–7k), but attention is a minority of the forward, so it cannot offset the linear-quant overhead — net still slower here. (`SAGEATTENTION_SM120_EVAL.md`)
-5. **Accuracy holds** (output preserved; DINOv3 weakest at feat 0.805 / PCA 0.912). The open problem is the inference *kernel*, not the PTQ math.
+1. **"W4A4 = 3× faster" (PHASE0/SP1) was a GEMM-only microbench**; the real end-to-end speedup **SCALES WITH sequence length S** — bigger GEMMs + longer attention amortize the online-quant overhead and the `_scaled_mm_v2` graph-break.
+2. **Crossover ≈ S 37k.** Below it (per-frame image ViT, low-res clips) W4A4+SA3 is *slower* (0.43–0.87×); above it it *wins* — **full-resolution V-JEPA (S≈131k) = 1.26× faster**, accuracy preserved.
+3. **The toolkit delivers a real speedup on the heavy long-context case (full-res spatio-temporal video), not on short-sequence per-frame image ViT.** A fused quant+GEMM `torch.library` custom op (removing the dynamo graph-break) — or vLLM/TRT-LLM — would lower the crossover so image ViTs benefit too and widen the video win.
+4. **SA3 FP4 attention** wins at long S (≈1.3× attention-only) and is part of the V-JEPA full-res win; it loses below ~S=4–7k (`SAGEATTENTION_SM120_EVAL.md`).
+5. **Accuracy holds across all** (PCA-RGB ≥ 0.99 except DINOv3 0.93 / feat 0.82). The PTQ math is sound; speed is purely an S / kernel-fusion question.
 
 ## Reproduce
 Scripts in the session scratchpad: `real_vjepa_sa3.py`, `real_vjepa_combined.py`, `nvfp4_lin_bench.py`, `compile_test.py` (run in a torch-2.12+cu130 venv with `sageattn3` built; `repvis/src` + `vit-nvfp4/src` on `sys.path`).
