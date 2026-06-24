@@ -35,14 +35,26 @@ The **FP4 GEMM itself is fine** (≈1.3–1.8× faster than bf16 on large GEMMs)
 |---|---|---|---|
 | nvfp4_linear (M14080 K4096 N1024) | 8.555 ms | **0.378 ms** | 0.329 ms |
 
-`torch.compile` fuses the elementwise quant into ~bf16 parity (22× over eager). repvis already exposes this via `REPVIS_COMPILE=1`. Even compiled, the *net* W4A4 speedup is GEMM-size-dependent: large MLP up-projections win (~1.5–1.8×), small projections sit near parity.
+`torch.compile` fuses the elementwise quant into ~bf16 parity (22× over eager) **for the STANDALONE function**. repvis exposes compile via `REPVIS_COMPILE=1`. **But this parity does NOT carry to the full model** — see the multi-model benchmark below.
+
+## Full-model benchmark — all 4 repvis models, torch.compile ON (the real deployment baseline)
+Real test.mp4 input (DINO: 8 frames, per-frame @max_side 1024; V-JEPA: 32-frame clip @640). W4A4 = NVFP4 Linears (middle blocks) + SA3 FP4 attention (all blocks). Steady-state fwd ms after compile warmup.
+
+| model | S | BF16 (compiled) | W4A4+SA3 (compiled) | speedup | feat cos | PCA-RGB cos |
+|---|---|---|---|---|---|---|
+| dinov2-base | 2994 | 23.2 ms | 48.7 ms | **0.48×** | 0.948 | 0.992 |
+| dinov2-large | 2994 | 69.8 ms | 126.2 ms | **0.55×** | 0.962 | 0.994 |
+| dinov3-vitb16 | 2309 | 18.8 ms | 43.5 ms | **0.43×** | 0.805 | 0.912 |
+| vjepa21-vitl | 14080 | 93.7 ms | 142.3 ms | **0.66×** | 0.970 | 0.992 |
+
+**W4A4+SA3 is SLOWER than compiled BF16 on every model (0.43–0.66×), even at V-JEPA's S=14080.** Accuracy holds (PCA-RGB ≥ 0.99 except DINOv3 0.912 / feat 0.805). The compile logs show the cause: `torch._scaled_mm_v2` and the SA3 custom op are **opaque to TorchDynamo (graph breaks)**, so the online activation quant does not fully fuse in-model — the standalone-function parity does not carry. And compiled BF16 is itself a strong baseline.
 
 ## Corrected conclusions
-1. **The "W4A4 NVFP4 = 3× faster" (PHASE0/SP1) was a GEMM-only microbench** (operands already quantized). End-to-end inference with the eager `nvfp4_linear` is 5–26× *slower* because the online activation quant is unfused.
-2. **W4A4 inference requires `torch.compile`** to fuse the activation quant (or a fused quant+GEMM kernel / an optimized W4A4 runtime like vLLM/TRT-LLM). Our `nvfp4_linear` is **accuracy/measurement-grade, not speed-grade** as-is.
-3. **The genuine "fused kernel" need is on the LINEAR activation-quant side, not attention** — and `torch.compile` largely covers it (no hand-written kernel required).
-4. **SA3 FP4 attention** is the one drop-in fused win on this video workload: 1.10× end-to-end (1.30× attention-only; attention is ~45% of the V-JEPA forward), accuracy-safe (PCA 0.9989), no custom kernel. Worth it for long-context video; below ~S=4–7k it loses to torch SDPA (see `SAGEATTENTION_SM120_EVAL.md`).
-5. **Accuracy of the PTQ holds** on the real workload — the toolkit correctly preserves the rendered output; the open work is making the W4A4 *inference path* fast (compile / fused quant), not accuracy.
+1. **"W4A4 NVFP4 = 3× faster" (PHASE0/SP1) was a GEMM-only microbench** (operands pre-quantized). It does not reflect inference: end-to-end our W4A4 path is *slower*.
+2. **`torch.compile` does NOT rescue it in-model.** It fuses the *standalone* quant to bf16 parity, but `_scaled_mm_v2` graph-breaks dynamo inside the real model, so compiled W4A4+SA3 is **0.43–0.66× (1.5–2.3× slower)** across all four models.
+3. **As built, this toolkit delivers PTQ accuracy, NOT inference speed.** Real speedup needs the quant+FP4-GEMM fused and registered as a `torch.library` custom op (so dynamo keeps it in-graph), or an external optimized W4A4 runtime (vLLM `nvfp4_scaled_mm_sm120`, TRT-LLM). `nvfp4_linear` (eager quant + `_scaled_mm_v2`) is a correctness/measurement reference.
+4. **SA3 FP4 attention** speeds attention only (≈1.3× at long S; loses below ~S=4–7k), but attention is a minority of the forward, so it cannot offset the linear-quant overhead — net still slower here. (`SAGEATTENTION_SM120_EVAL.md`)
+5. **Accuracy holds** (output preserved; DINOv3 weakest at feat 0.805 / PCA 0.912). The open problem is the inference *kernel*, not the PTQ math.
 
 ## Reproduce
 Scripts in the session scratchpad: `real_vjepa_sa3.py`, `real_vjepa_combined.py`, `nvfp4_lin_bench.py`, `compile_test.py` (run in a torch-2.12+cu130 venv with `sageattn3` built; `repvis/src` + `vit-nvfp4/src` on `sys.path`).
