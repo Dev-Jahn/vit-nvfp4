@@ -1,12 +1,8 @@
 """Quantize DINOv2 to W4A4 NVFP4 and report fidelity vs the BF16 model.
 
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a uv run python examples/dinov2_ptq.py
+Run: TORCH_CUDA_ARCH_LIST=12.0a uv run python examples/dinov2_ptq.py
 """
-import os
-
 import torch
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from transformers import AutoModel  # noqa: E402
 

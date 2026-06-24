@@ -3,15 +3,12 @@
 The model registry (ptq/models.py) derives the block container / layer count /
 feature pooling, so one harness covers DINOv2, DINOv3, SigLIP2, ...
 
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=0 \
+Run: TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=0 \
        uv run python examples/eval_knn_vit.py --model facebook/dinov3-vitb16-pretrain-lvd1689m
 """
 import argparse
-import os
 
 import torch
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from datasets import load_dataset  # noqa: E402
 from transformers import AutoModel, AutoImageProcessor  # noqa: E402

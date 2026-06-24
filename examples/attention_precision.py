@@ -5,15 +5,11 @@ random pixel_values), then measures the output cosine of ``quant_sdpa`` vs the
 fp32 reference for each (QKᵀ, P·V) precision combination and the smooth-K/V
 ablations. This locates the per-stage accuracy floor (NVFP4 vs FP8).
 
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=1 \
+Run: TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=1 \
      uv run python examples/attention_precision.py
 """
-import os
-
 import torch
 import torch.nn.functional as F
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from transformers import AutoModel, AutoImageProcessor  # noqa: E402
 

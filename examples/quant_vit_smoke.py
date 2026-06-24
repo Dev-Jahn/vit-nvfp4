@@ -5,14 +5,10 @@ These don't fit the image-only k-NN harness (patchified / video inputs), so we
 validate: registry detection, swap count (fused qkv / predictor exclusion), and
 BF16-vs-W4A4 output cosine on one real/realistic forward.
 
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=0 \
+Run: TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=0 \
        uv run python examples/quant_vit_smoke.py
 """
-import os
-
 import torch
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from datasets import load_dataset  # noqa: E402
 from transformers import AutoModel, AutoProcessor  # noqa: E402

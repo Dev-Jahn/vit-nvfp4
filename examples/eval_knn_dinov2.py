@@ -1,13 +1,9 @@
 """Real-data accuracy of W4A4 NVFP4 DINOv2 vs BF16, via frozen-feature k-NN on Food-101.
 
 Measures the metric that matters (downstream classification), not just feature cosine.
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a uv run python examples/eval_knn_dinov2.py
+Run: TORCH_CUDA_ARCH_LIST=12.0a uv run python examples/eval_knn_dinov2.py
 """
-import os
-
 import torch
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from datasets import load_dataset  # noqa: E402
 from transformers import AutoModel, AutoImageProcessor  # noqa: E402

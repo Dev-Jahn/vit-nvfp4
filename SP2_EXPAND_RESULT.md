@@ -18,7 +18,7 @@ Swap counts confirm the hard cases: Qwen3-VL's **fused qkv** is swapped (4 Linea
 
 ## Measured accuracy
 
-**Image encoders — frozen-feature k-NN on Oxford Flowers-102** (gallery 3060 / query 1020, k-NN top-1), env `CUDA_VISIBLE_DEVICES=0 TORCH_CUDA_ARCH_LIST=12.0a HF_HOME=/var/cache/huggingface uv run python examples/eval_knn_vit.py --model <name>`:
+**Image encoders — frozen-feature k-NN on Oxford Flowers-102** (gallery 3060 / query 1020, k-NN top-1), env `CUDA_VISIBLE_DEVICES=0 TORCH_CUDA_ARCH_LIST=12.0a uv run python examples/eval_knn_vit.py --model <name>`:
 
 | model | feature cos | k=10 BF16→W4A4 | k=20 BF16→W4A4 | verdict |
 |---|---|---|---|---|

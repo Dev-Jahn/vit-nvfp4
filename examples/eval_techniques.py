@@ -2,14 +2,10 @@
 
 DINOv2-base, skip(2,2), Food-101 (native high-res, 101 classes, real k-NN headroom).
 Compares: BF16 / W4A4 baseline / +Four Over Six / +GPTQ / +FoS+bias-correction / +RegCache.
-Run: HF_HOME=/var/cache/huggingface TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=4 \
+Run: TORCH_CUDA_ARCH_LIST=12.0a CUDA_VISIBLE_DEVICES=4 \
      uv run python examples/eval_techniques.py
 """
-import os
-
 import torch
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from datasets import load_dataset  # noqa: E402
 from transformers import AutoModel, AutoImageProcessor  # noqa: E402

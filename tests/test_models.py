@@ -1,10 +1,6 @@
-import os
-
 import pytest
 import torch
 import torch.nn as nn
-
-os.environ.setdefault("HF_HOME", "/var/cache/huggingface")
 
 from vit_nvfp4.ptq.models import find_block_container, model_spec, quantize_vit
 from vit_nvfp4.ptq.policy import vit_block_policy
