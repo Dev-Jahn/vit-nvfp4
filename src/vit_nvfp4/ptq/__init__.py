@@ -1,5 +1,6 @@
 from .qlinear import QuantLinear
 from .policy import vit_block_policy, block_index
+from .qattention import enable_quant_attention, vit_attn_policy
 from .convert import quantize_model
 from .convert_gptq import quantize_model_gptq
 from .models import ModelSpec, model_spec, find_block_container, quantize_vit
@@ -11,6 +12,7 @@ from .regcache import RegCache, curate_register
 __all__ = [
     "QuantLinear",
     "vit_block_policy", "block_index",
+    "enable_quant_attention", "vit_attn_policy",
     "quantize_model", "quantize_model_gptq",
     "ModelSpec", "model_spec", "find_block_container", "quantize_vit",
     "tensor_cosine", "block_output_cosines",
