@@ -33,6 +33,9 @@ Swap counts confirm the hard cases: Qwen3-VL's **fused qkv** is swapped (4 Linea
 | V-JEPA2.1 ViT-L | random 16-frame clip, fp32 | 0.987 | RoPE path + predictor-exclusion OK |
 
 ### Qwen3-VL ViT is the W4A4-sensitive outlier
+
+> **⚠️ CORRECTION (2026-06-24 — see `QWEN_W4A4_VERDICT.md`):** this subsection's premise is a **metric artifact**. The 0.881 is `last_hidden_state` flattened cosine, which sits *upstream* of the vision merger's LayerNorm. At the actual MLLM output — response-level teacher-forced **logit-KL ≈ 0.024 nats, top-1 ≈ 0.96**, and BF16-matching generated descriptions — Qwen3-VL **W4A4 is near-lossless and needs no mixed precision**. The cosine/skip-sweep numbers below stand as measured; their *interpretation* (sensitive outlier / prime mixed-precision target) is **superseded**. Also: the corrected Four Over Six (global 448→256, commit `792094e`) turns FoS from net-negative (0.9376, below `six`) to best (0.9455) on Qwen weights; the earlier "GPTQ+bias→0.921" used the buggy FoS and the wrong metric.
+
 Sweeping skip depth (same image): skip(2,2)=0.881 · (4,4)=0.907 · (6,6)=0.915 · (8,8)=0.938. Monotonic with quantized-block count — distributed error accumulation, not a kernel bug (the GEMM is the SP1-validated path that yields ≥0.98 on every other model here). Unlike the SSL-pretrained encoders (DINOv2/v3, SigLIP), Qwen3-VL's vision tower does **not** reach ~0.98 even at skip(8,8). **This is the prime customer for the planned per-Linear mixed-precision driver** (promote high-error Linears to BF16 via `block_output_cosines`) or an FP8 vision-encoder fallback. A true downstream-VQA eval (not done here — too heavy) is needed to judge task impact.
 
 **Remaining calibration-only levers measured (skip 2,2, 8-image calib, same eval image).** The 0.881 baseline applied only the *defaults* (Four Over Six weights + max activation calibration); the opt-in SP5 levers were not. Adding them:
