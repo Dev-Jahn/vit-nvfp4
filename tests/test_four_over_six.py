@@ -13,7 +13,7 @@ def _blocks(x, blk=16):
     return x.float().reshape(*x.shape[:-1], x.shape[-1] // blk, blk)
 
 
-def test_invariants_and_mse_monotone():
+def test_invariants_and_aggregate_mse():
     torch.manual_seed(0)
     x = torch.randn(128, 768) * 0.1
     x[0, :16] += torch.randn(16) * 2.0  # block with a wide spread -> exercises 4-vs-6 dead zone
@@ -21,20 +21,27 @@ def test_invariants_and_mse_monotone():
     c6, b6, g6 = quantize_to_nvfp4(x, 16, block_select="six")
     cm, bm, gm = quantize_to_nvfp4(x, 16, block_select="mse")
 
-    # Format invariant: FP32 global = amax/(6*448), identical for both policies.
-    assert torch.equal(g6, gm)
-    assert torch.allclose(g6, x.abs().amax() / (fmt.E2M1_MAX * fmt.E4M3_MAX))
+    # scale-to-6 uses the standard amax/(6*448) global; Four Over Six uses a
+    # smaller amax/(6*256) global so its scale-to-4 candidate stays E4M3-
+    # representable (else the M=4 scale saturates 448 on high-magnitude blocks
+    # and silently reverts to M=6). The globals are therefore NOT equal.
+    amax = x.abs().amax()
+    assert torch.allclose(g6, amax / (fmt.E2M1_MAX * fmt.E4M3_MAX))
+    assert torch.allclose(gm, amax / (fmt.E2M1_MAX * fmt.FOS_SCALE_MAX))
+    assert not torch.equal(g6, gm)
     # Codes stay standard E2M1 (0..15); block scale stays E4M3.
     assert cm.dtype == torch.uint8 and int(cm.max()) <= 15
     assert bm.dtype == torch.float8_e4m3fn and bm.shape == b6.shape
 
-    # Per-block MSE is never worse with the MSE pick.
+    # Per-block "FoS never worse than six" only holds when both share a global.
+    # Four Over Six uses a *different* (256) global, so each block's E4M3 scale
+    # rounds to a different point than under six's 448 global and a few easy blocks
+    # can round slightly worse. The meaningful guarantee is on the AGGREGATE error,
+    # which FoS reduces by densifying the 4..6 dead zone where the error concentrates.
     xb = _blocks(x)
-    mse6 = ((dequantize_nvfp4(c6, b6, g6).reshape(xb.shape) - xb) ** 2).mean(-1)
-    msem = ((dequantize_nvfp4(cm, bm, gm).reshape(xb.shape) - xb) ** 2).mean(-1)
-    assert (msem <= mse6 + 1e-9).all()
-    # And strictly better in aggregate on this tensor.
-    assert msem.mean() < mse6.mean()
+    mse6 = ((dequantize_nvfp4(c6, b6, g6).reshape(xb.shape) - xb) ** 2).mean()
+    msem = ((dequantize_nvfp4(cm, bm, gm).reshape(xb.shape) - xb) ** 2).mean()
+    assert msem < mse6, (float(msem), float(mse6))
 
 
 def test_each_block_scale_is_six_or_four_variant():
@@ -54,7 +61,24 @@ def test_each_block_scale_is_six_or_four_variant():
     assert (torch.isclose(chosen, cand6) | torch.isclose(chosen, cand4)).all()
 
 
+def test_four_over_six_applies_to_the_max_block():
+    # Regression: the block holding the tensor max must still benefit from the
+    # scale-to-4 candidate. Under a amax/(6*448) global its M=4 scale (amax_b/4)
+    # saturates E4M3 and collapses to M=6, neutering FoS exactly where magnitudes
+    # are largest; amax/(6*256) keeps that candidate representable.
+    torch.manual_seed(2)
+    x = torch.randn(8, 64) * 0.05
+    x[0, :16] = torch.tensor([6.0] + [5.0] * 15)  # tensor-max block, energy in the 4..6 dead zone
+    xb = _blocks(x)
+    c6, b6, g6 = quantize_to_nvfp4(x, 16, block_select="six")
+    cm, bm, gm = quantize_to_nvfp4(x, 16, block_select="mse")
+    mse6 = ((dequantize_nvfp4(c6, b6, g6).reshape(xb.shape) - xb) ** 2).mean(-1)[0, 0]
+    msem = ((dequantize_nvfp4(cm, bm, gm).reshape(xb.shape) - xb) ** 2).mean(-1)[0, 0]
+    assert msem < mse6, (float(msem), float(mse6))  # FoS must help the max block
+
+
 if __name__ == "__main__":
-    test_invariants_and_mse_monotone()
+    test_invariants_and_aggregate_mse()
     test_each_block_scale_is_six_or_four_variant()
+    test_four_over_six_applies_to_the_max_block()
     print("OK")

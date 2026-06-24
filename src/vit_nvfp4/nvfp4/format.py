@@ -2,6 +2,11 @@ import torch
 
 E2M1_MAX = 6.0
 E4M3_MAX = 448.0
+# Four Over Six (arXiv:2512.02010): the per-block scale-to-4 candidate (amax_b/4)
+# is 1.5x the scale-to-6 one, so the per-tensor global must use 256 (not E4M3_MAX)
+# — otherwise the max block's scale-to-4 candidate (->384) would saturate E4M3 at
+# 448 and silently collapse back to scale-to-6, neutering FoS on the largest blocks.
+FOS_SCALE_MAX = 256.0
 
 # magnitude per 3-bit index (E2M1 representable magnitudes)
 _MAG = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0], dtype=torch.float32)

@@ -33,16 +33,24 @@ def quantize_to_nvfp4(x: torch.Tensor, block: int = 16, global_scale: torch.Tens
       - ``'mse'`` (Four Over Six, arXiv:2512.02010): quantize each block twice —
         scaling max to 6.0 and to 4.0 — dequantize both, and keep the lower
         per-block-MSE variant. Scaling to 4.0 makes the FP4 grid denser near the
-        block max (3 lands at 75%). On-wire format is unchanged: still standard
-        E2M1 codes + per-16 E4M3 block scale (=amax_b/4 or amax_b/6, times 1/global)
-        + FP32 global=amax/(6*448), so the backend GEMM decode is untouched.
+        block max (3 lands at 75%). On-wire format is unchanged (standard E2M1
+        codes + per-16 E4M3 block scale), but the FP32 global is amax/(6*256) — NOT
+        amax/(6*448): the scale-to-4 candidate (amax_b/4) is 1.5x the scale-to-6 one,
+        so under a 448 global it saturates E4M3 (clamps to 448) on every block with
+        amax_b > 2/3·amax and silently collapses back to scale-to-6. The 256 global
+        keeps the max block's candidates (256 and 384) exactly E4M3-representable so
+        Four Over Six applies to the high-magnitude blocks too. The backend GEMM
+        decode is still untouched (global is just a per-tensor scalar).
     """
     assert x.shape[-1] % block == 0, "K must be a multiple of block; pad first"
     assert block_select in ("six", "mse")
     xf = x.to(torch.float32)
     if global_scale is None:
         amax = xf.abs().amax().clamp(min=1e-12)
-        global_scale = (amax / (fmt.E2M1_MAX * fmt.E4M3_MAX)).to(torch.float32)
+        # Four Over Six needs a smaller global so its scale-to-4 candidate stays
+        # E4M3-representable on high-magnitude blocks (see docstring / format.py).
+        denom = fmt.FOS_SCALE_MAX if block_select == "mse" else fmt.E4M3_MAX
+        global_scale = (amax / (fmt.E2M1_MAX * denom)).to(torch.float32)
     s_enc = 1.0 / global_scale
     xb = xf.reshape(*xf.shape[:-1], xf.shape[-1] // block, block)
     amax_b = xb.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)            # (..., K/blk, 1)
