@@ -28,3 +28,19 @@ def gemm(a_codes, a_bs, a_gs, b_codes, b_bs, b_gs, out_dtype=torch.bfloat16):
         [b_sf, b_g], _BLK, _SWZ,
         None, out_dtype,
     )
+
+
+def gemm_packed(a_fp4, a_sf, a_g, w_fp4, w_sf, w_g, out_dtype=torch.bfloat16):
+    """W4A4 GEMM on operands already packed + swizzled by ``triton_cast.cast_nvfp4``.
+
+    ``a_fp4``:(M, K//2) float4_e2m1fn_x2, ``a_sf``: swizzled E4M3 block scale, ``a_g``: fp32 scalar
+    (activation). ``w_fp4``:(N, K//2) float4 (weight, row-major as cast), ``w_sf``: swizzled E4M3
+    (N-outer), ``w_g``: fp32 scalar. Returns (M, N). Mirrors ``gemm`` but skips pack/swizzle since
+    the fused cast already produced them — this is the fast inference path.
+    """
+    return torch._scaled_mm_v2(
+        a_fp4, w_fp4.t(),                                   # (M,K//2) , (N,K//2)->(K//2,N)
+        [a_sf, a_g.reshape(1).float()], _BLK, _SWZ,
+        [w_sf, w_g.reshape(1).float()], _BLK, _SWZ,
+        None, out_dtype,
+    )
