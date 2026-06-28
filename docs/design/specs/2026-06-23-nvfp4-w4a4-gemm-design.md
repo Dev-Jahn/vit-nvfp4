@@ -162,7 +162,7 @@ global scale를 빠뜨리면 동적범위가 조용히 잘린다.
 ```
 vit-nvfp4/
 ├── pyproject.toml                 # uv, torch cu130
-├── docs/superpowers/specs/2026-06-23-nvfp4-w4a4-gemm-design.md
+├── docs/design/specs/2026-06-23-nvfp4-w4a4-gemm-design.md
 ├── src/vit_nvfp4/
 │   └── nvfp4/
 │       ├── __init__.py
